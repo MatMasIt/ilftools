@@ -1,0 +1,66 @@
+#! /bin/python3
+import argparse,shlex,os,subprocess,json,time,platform,datetime
+def mkdir(cmd,dirs,data):
+	try:
+		subprocess.check_output(cmd, shell=True, text=True)
+		for d in dirs:
+			open(d+"/.ilft","w").write(json.dumps(data))
+	except Exception as e:
+		return False
+config_folder=os.path.expanduser("~")+"/.config/ilftools/"
+parser = argparse.ArgumentParser(description='Improved mkdir')
+parser.add_argument('DIRECTORIES', metavar='dir', type=str, nargs='+',help='DIRECTORY(ies)')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1')
+parser.add_argument('--mode', "-m",  metavar='mode', type=str, help=' set file mode (as in chmod), not a=rwx - umask')
+parser.add_argument('--parents',"-p",action='store_true',help='no error if existing, make parent directories as needed')
+parser.add_argument('--verbose',"-v",action='store_true',help='print a message for each created directory')
+parser.add_argument('-Z',action='store_true',help='set SELinux security context of each created directory to the default type')
+parser.add_argument('--context', metavar='context', type=str,help='like  -Z,  or if CTX is specified then set the SELinux or SMACK security context to CTX')
+parser.add_argument('--emulate',"-e", action='store_true',help='Emulate mkdir directly, no additional features')
+parser.add_argument('--anonymous',"-a", action='store_true',help='Don\'t add personal info to the directories')
+args = parser.parse_args()
+cmd="mkdir "
+if args.Z:
+	cmd+="-Z "
+if args.mode != None :
+	cmd+="-m "+shlex.quote(args.mode)+" "
+if args.context != None:
+	cmd+="--context "+shlex.quote(args.context)+" "
+if args.parents:
+	cmd+="-p "
+if args.verbose:
+	cmd+="-v "
+for d in args.DIRECTORIES:
+	cmd+=shlex.quote(d)+" "
+if not os.path.exists(config_folder+"author"):
+	r=str(input("No author info has been specified for this user.\nIt will be stored in /.config/ilftools/\nDo you want to set the data now? [y/N]? "))
+	rn=r.strip().lower()
+	if rn=="yes" or rn=="y":
+		print("--------\nCAUTION: this information will be added to any repository created by Imkdir\nIf you want to create a directory without personal data, try Imkdir -a\n--------")
+		name=str(input("Name: "))
+		surname=str(input("Surname: "))
+		nickname=str(input("Nickname: "))
+		email=str(input("Email: "))
+		gpg=str(input("GPG key: "))
+		gh=str(input("GitHub usename: "))
+		te=str(input("Telegram usename: "))
+		tw=str(input("Twitter usename: "))
+		notes=str(input("Notes:"))
+		data={"name":name,"surname":surname,"nickname":nickname,"email":email,"gpg":gpg,"gh":gh,"te":te,"tw":tw,"notes":notes}
+		dsj=json.dumps(data)
+		os.system("mkdir -p "+config_folder)
+		open(config_folder+"author","w").write(dsj)
+		dsj=data
+		print("--------\nConfiguration saved, proceeding to make the directory\n--------")
+	else:
+		dsj={}
+else:
+	if not args.anonymous:
+		dsj=json.loads(open(config_folder+"author","r").read())
+	else:
+		dsj={}
+
+dsj["created"]=datetime.datetime.utcnow().timestamp()
+dsj["utcoffset"]=-time.timezone
+dsj["platform"]=platform.system()
+mkdir(cmd,args.DIRECTORIES,dsj)

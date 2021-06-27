@@ -1,0 +1,241 @@
+#!/bin/python3
+import argparse
+import datetime
+import glob
+import json
+import os
+import time
+
+installed=False
+while not installed:
+    try:
+        from terminaltables import DoubleTable
+        from terminaltables import GithubFlavoredMarkdownTable
+        installed=True
+    except:
+        print("Installing terminaltables")
+        os.system("sudo pip3 install terminaltables")
+
+
+def uTd(ts):
+    return datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+
+def get_size(start_path = '.'):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+
+    return total_size
+
+def oneTrueNoMore(list):
+    flag = False
+    for element in list:
+        if element:
+            if flag:
+                return False
+            flag = True
+    return True
+
+
+def getTab(data, args):
+    if not oneTrueNoMore([
+        args.by_size_descending,
+        args.by_size_ascending,
+        args.by_adate_descending,
+        args.by_adate_ascending,
+        args.by_cdate_descending,
+        args.by_cdate_ascending,
+        args.by_mdate_descending,
+        args.by_mdate_ascending,
+        args.by_name_descending,
+        args.by_name_ascending,
+    ]):
+        print("You must specify only ONE sorting mode")
+        exit(1)
+    if args.by_size_descending:
+        data.sort(key=lambda el: el["size"]["size"])
+        data.reverse()
+    elif args.by_size_ascending:
+        data.sort(key=lambda el: el["size"]["size"])
+    elif args.by_adate_descending:
+        data.sort(key=lambda el: el["dates"]["atime"])
+        data.reverse()
+    elif args.by_adate_ascending:
+        data.sort(key=lambda el: el["dates"]["atime"])
+    elif args.by_cdate_descending:
+        data.sort(key=lambda el: el["dates"]["ctime"])
+        data.reverse()
+    elif args.by_cdate_ascending:
+        data.sort(key=lambda el: el["dates"]["ctime"])
+    elif args.by_mdate_descending:
+        data.sort(key=lambda el: el["dates"]["mtime"])
+        data.reverse()
+    elif args.by_mdate_ascending:
+        data.sort(key=lambda el: el["dates"]["mtime"])
+    elif args.by_name_descending:
+        data.sort(key=lambda el: el["name"])
+        data.reverse()
+    elif args.by_name_ascending:
+        data.sort(key=lambda el: el["name"])
+    if args.group:
+        data.sort(key=lambda el: el["group"])
+    tab = [["Type", "Name", "Size", "Permissions", "Dates"]]
+    for r in data:
+        tab.append([r["desc"], r["name"], r["size"]["human"], r["permissions"], r["dates"]["humanAll"]])
+    return tab
+
+
+def sizeof_fmt(num, suffix='B'):
+    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+        if abs(num) < 1024.0:
+            return "%3.1f%s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f%s%s" % (num, 'Yi', suffix)
+
+data=[]
+parser = argparse.ArgumentParser(description='Improved ls')
+parser.add_argument('DIRECTORY', metavar='dir', type=str, help='DIRECTORY')
+parser.add_argument('--by-size-descending', "-sd", action='store_true', help='Sort by descending size')
+parser.add_argument('--by-size-ascending', "-sa", action='store_true', help='Sort by ascending size')
+parser.add_argument('--by-adate-descending', "-ldd", action='store_true', help='Sort by descending access date')
+parser.add_argument('--by-adate-ascending', "-lda", action='store_true', help='Sort by ascending access date')
+parser.add_argument('--by-cdate-descending', "-cdd", action='store_true', help='Sort by descending creation date')
+parser.add_argument('--by-cdate-ascending', "-cda", action='store_true', help='Sort by ascending creation date')
+parser.add_argument('--by-mdate-descending', "-mdd", action='store_true', help='Sort by descending edit date')
+parser.add_argument('--by-mdate-ascending', "-mda", action='store_true', help='Sort by ascending edit date')
+parser.add_argument('--by-name-descending', "-nd", action='store_true', help='Sort by descending name')
+parser.add_argument('--by-name-ascending', "-na", action='store_true', help='Sort by ascending name (Default)')
+parser.add_argument('--group', "-g", action='store_true', help='Group by type (directories, files, symlinks)')
+parser.add_argument('--markdown', "-md", action='store_true', help='Print markdown table')
+parser.add_argument('--show-author-info', "-a", action='store_true',
+                    help='Show author information about the directory (folders created with Imkdir)')
+args = parser.parse_args()
+if not os.path.isdir(args.DIRECTORY):
+    print("Directory \""+args.DIRECTORY+"\" does not exist")
+    exit(1)
+if not os.access(args.DIRECTORY, os.R_OK):
+    print("Cannot access \"" + args.DIRECTORY + "\"")
+    exit(1)
+k = glob.glob(args.DIRECTORY + "/*")
+for element in k:
+    if os.path.islink(element):
+        typ = "Symlink"
+        name = os.path.basename(element)
+        group = typ
+    elif os.path.isdir(element):
+        group = "Directory"
+        descriptorArray = []
+        dirs = len([name for name in os.listdir(element) if os.path.isdir(os.path.join(element, name))])
+        if dirs > 0:
+            if dirs == 1:
+                descMeasure = "directory"
+            else:
+                descMeasure = "directories"
+            descriptorArray.append(str(dirs) + " " + descMeasure)
+        files = len([name for name in os.listdir(element) if os.path.isfile(os.path.join(element, name))])
+        if files > 0:
+            if files == 1:
+                descMeasure = "file"
+            else:
+                descMeasure = "files"
+            descriptorArray.append(str(files) + " " + str(descMeasure))
+        symlinks = len([name for name in os.listdir(element) if os.path.islink(os.path.join(element, name))])
+        if symlinks > 0:
+            if symlinks == 1:
+                descMeasure = "symlink"
+            else:
+                symlinks = "symlinks"
+            descriptorArray.append(str(symlinks) + " " + str(descMeasure))
+        typ = "Directory"
+        if len(descriptorArray):
+            typ += "\n (" + ", ".join(descriptorArray) + ")"
+        name = os.path.basename(element)
+    else:
+        typ = "File"
+        name = os.path.basename(element)
+        rr = name.split(".")
+        ext = ""
+        if len(rr) > 1:
+            ext = rr[len(rr) - 1].upper()
+            typ += " " + ext
+        group = typ
+    stats = os.stat(element)
+    size = sizeof_fmt(stats.st_size)
+    dates = "Opened: " + uTd(stats.st_atime) + "\nEdited: " + uTd(stats.st_mtime) + "\nCreated: " + uTd(stats.st_ctime)
+    mask = oct(stats.st_mode)[-3:]
+    dT={
+        "desc": typ,
+        "name": name,
+        "size": {
+            "human": size,
+            "size": stats.st_size
+        }
+        ,
+        "permissions": mask,
+        "dates": {
+            "atime": stats.st_atime,
+            "mtime": stats.st_mtime,
+            "ctime": stats.st_ctime,
+            "humanAll": dates}
+        ,
+        "group": group
+    }
+    if dT["group"]== "Directory":
+        dT["size"]["size"]=get_size(element)
+        dT["size"]["human"]=sizeof_fmt(dT["size"]["size"])
+    data.append(dT)
+tableA = getTab(data, args)
+if args.markdown:
+    table = GithubFlavoredMarkdownTable(tableA)
+else:
+    table = DoubleTable(tableA)
+table.inner_row_border = True
+print("\n"+args.DIRECTORY + "\n\n+---------+\n")
+tabAuthor = []
+columnsAuthor = {
+    "name": "Name",
+    "surname": "Suraname",
+    "email": "Email",
+    "gpg": "GPG Key",
+    "gh": "Github",
+    "te": "Telegram",
+    "tw": "Twitter",
+    "notes": "Notes",
+    "created": "Created",
+    "utcoffset": "Timezone",
+    "platform": "Platform"
+}
+if args.show_author_info and os.path.isfile(args.DIRECTORY + "/.ilft"):
+    data = json.loads(open(args.DIRECTORY + "/.ilft", "r").read())
+    for key in data.keys():
+        k=key
+        if not data[key]:
+            continue
+        if k in columnsAuthor.keys():
+            k=columnsAuthor[k]
+        if key=="created":
+            data[key]=uTd(data[key])
+        elif key=="utcoffset":
+            ts=int(data[key])
+            taa=abs(ts)
+            data[key] = time.strftime('%Hh %Mm', time.gmtime(taa))
+            if ts<0:
+                data[key]="-"+data[key]
+            else:
+                data[key]="+"+data[key]
+
+        tabAuthor.append([k,data[key]])
+    if args.markdown:
+        tabAuthor.insert(0,["Characteristic","Value"])
+        TA = GithubFlavoredMarkdownTable(tabAuthor)
+    else:
+        TA = DoubleTable(tabAuthor)
+
+    TA.inner_heading_row_border=False
+    print(TA.table+"\n\n")
+
+print(table.table)
