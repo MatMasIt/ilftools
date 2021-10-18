@@ -1,5 +1,7 @@
 # ILFT - Interactive Linux File Tools
 
+![GitHub](https://img.shields.io/github/license/MatMasIt/ilftools)
+
 Collection of tools for interactive and metadata-friendly directory and file management
 
 
